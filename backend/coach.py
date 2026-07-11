@@ -10,7 +10,7 @@ load_dotenv()
 
 client = genai.Client()  # picks up GEMINI_API_KEY from the environment
 
-MODEL = "gemini-2.5-flash"
+MODEL = "gemini-3.5-flash"
 
 COACHING_SYSTEM_PROMPT = (
     "You are a concise squat form coach. Given structured rep data from a set, "
@@ -29,6 +29,7 @@ def get_coaching(rep_data: list[dict]) -> str:
             system_instruction=COACHING_SYSTEM_PROMPT,
             max_output_tokens=200,
             temperature=0.7,
+            thinking_config=types.ThinkingConfig(thinking_budget=0),
         ),
     )
     return response.text
