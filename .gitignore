@@ -1,0 +1,19 @@
+venv/
+__pycache__/
+*.pyc
+.env
+
+# Arduino
+*.ino.elf
+*.ino.bin
+build/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Session artifacts
+session_output.mp4
+session_log.csv
+
+

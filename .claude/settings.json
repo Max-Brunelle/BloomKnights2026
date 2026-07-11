@@ -1,0 +1,12 @@
+{
+  "permissions": {
+    "allow": [
+      "PowerShell(python backend\\\\vision.py)",
+      "PowerShell(pip install \"numpy<2\")",
+      "PowerShell(python backend\\\\scoring.py)",
+      "Bash(pip show *)",
+      "Bash(printenv)",
+      "Bash(python backend/coach.py)"
+    ]
+  }
+}
