@@ -14,14 +14,20 @@ MODEL = "gemini-3.5-flash"
 
 COACHING_SYSTEM_PROMPT = (
     "You are a concise squat form coach. Given structured rep data from a set, "
-    "give 2-3 sentences of specific, actionable feedback. Reference specific rep "
-    "numbers when calling out issues. Be direct and encouraging, not generic."
+    "give 2-3 sentences of specific, actionable feedback. Reference specific "
+    "rep numbers when calling out issues. If a rep includes an 'accel_std' "
+    "value, higher values indicate more wrist/arm instability or shakiness "
+    "during that rep - call this out by rep number if one rep is notably "
+    "higher than the others. Be direct and encouraging, not generic."
 )
 
 
-def get_coaching(rep_data: list[dict]) -> str:
+def get_coaching(rep_data: list[dict], user_context: str | None = None) -> str:
     """Blocking call - invoked once per completed set, not per frame."""
-    prompt = f"Here is the data from this set:\n{json.dumps(rep_data)}"
+    prompt = (
+        f"User-provided context: {user_context or 'none'}\n\n"
+        f"Here is the data from this set:\n{json.dumps(rep_data)}"
+    )
     response = client.models.generate_content(
         model=MODEL,
         contents=prompt,

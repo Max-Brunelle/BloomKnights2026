@@ -6,7 +6,9 @@
       "PowerShell(python backend\\\\scoring.py)",
       "Bash(pip show *)",
       "Bash(printenv)",
-      "Bash(python backend/coach.py)"
+      "Bash(python backend/coach.py)",
+      "Bash(python -c ' *)",
+      "Bash(python -c \"import os; print\\('GEMINI_API_KEY' in os.environ, 'GOOGLE_API_KEY' in os.environ\\)\")"
     ]
   }
 }

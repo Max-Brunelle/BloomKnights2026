@@ -2,11 +2,14 @@
 
 STANDING_ANGLE_THRESHOLD = 160
 BOTTOM_ANGLE_THRESHOLD = 100
-FULL_DEPTH_ANGLE = 90
+DEPTH_FULL_CREDIT_ANGLE = 90
+DEPTH_ZERO_CREDIT_ANGLE = 100
 MAX_DEPTH_PENALTY = 50
-TEMPO_PENALTY = 30
-MIN_DESCENT_DURATION_S = 0.5
 DEPTH_WARNING_THRESHOLD = 15
+
+MIN_DESCENT_S = 0.5
+TEMPO_MAX_PENALTY = 30
+TEMPO_WARNING_THRESHOLD = 10
 
 
 class RepCounter:
@@ -70,25 +73,33 @@ class RepCounter:
         return None
 
     def score_rep(self, min_angle, descent_duration_s, ascent_duration_s):
+        """Returns (score: int, warnings: list[str]) for a completed rep."""
         warnings = []
 
-        if min_angle > FULL_DEPTH_ANGLE:
+        # Depth penalty - gradual between DEPTH_FULL_CREDIT_ANGLE and DEPTH_ZERO_CREDIT_ANGLE
+        if min_angle > DEPTH_FULL_CREDIT_ANGLE:
             depth_penalty = min(
                 MAX_DEPTH_PENALTY,
-                MAX_DEPTH_PENALTY * (min_angle - FULL_DEPTH_ANGLE) / (BOTTOM_ANGLE_THRESHOLD - FULL_DEPTH_ANGLE),
+                MAX_DEPTH_PENALTY * (min_angle - DEPTH_FULL_CREDIT_ANGLE)
+                / (DEPTH_ZERO_CREDIT_ANGLE - DEPTH_FULL_CREDIT_ANGLE),
             )
         else:
             depth_penalty = 0
         if depth_penalty > DEPTH_WARNING_THRESHOLD:
             warnings.append("Didn't reach full depth")
 
-        tempo_penalty = 0
-        if descent_duration_s < max(MIN_DESCENT_DURATION_S, ascent_duration_s / 2):
-            tempo_penalty = TEMPO_PENALTY
+        # Tempo penalty - gradual based on how far under the threshold the descent was
+        tempo_threshold = max(MIN_DESCENT_S, ascent_duration_s / 2)
+        if descent_duration_s >= tempo_threshold:
+            tempo_penalty = 0
+        else:
+            deficit_ratio = (tempo_threshold - descent_duration_s) / tempo_threshold
+            tempo_penalty = TEMPO_MAX_PENALTY * min(1.0, deficit_ratio)
+        if tempo_penalty > TEMPO_WARNING_THRESHOLD:
             warnings.append("Descent too fast")
 
-        score = max(0, min(100, 100 - depth_penalty - tempo_penalty))
-        return int(round(score)), warnings
+        score = max(0, min(100, round(100 - depth_penalty - tempo_penalty)))
+        return score, warnings
 
 
 if __name__ == "__main__":
