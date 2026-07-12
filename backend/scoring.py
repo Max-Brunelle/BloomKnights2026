@@ -2,14 +2,28 @@
 
 STANDING_ANGLE_THRESHOLD = 160
 BOTTOM_ANGLE_THRESHOLD = 100
-DEPTH_FULL_CREDIT_ANGLE = 90
+
+DEPTH_FULL_CREDIT_ANGLE = 80
 DEPTH_ZERO_CREDIT_ANGLE = 100
 MAX_DEPTH_PENALTY = 50
 DEPTH_WARNING_THRESHOLD = 15
 
 MIN_DESCENT_S = 0.5
-TEMPO_MAX_PENALTY = 30
-TEMPO_WARNING_THRESHOLD = 10
+DESCENT_MAX_PENALTY = 25
+DESCENT_WARNING_THRESHOLD = 8
+
+MIN_ASCENT_S = 0.6
+ASCENT_MAX_PENALTY = 25
+ASCENT_WARNING_THRESHOLD = 8
+
+# Precision layer: rewards going beyond the bare minimum, so reps that
+# already clear full credit still differentiate from each other instead
+# of all flattening to a tied 100.
+DEPTH_IDEAL_ANGLE = 65      # depth this good or better earns full precision credit
+DEPTH_PRECISION_MAX = 6
+
+DESCENT_IDEAL_S = 2.0       # a nicely controlled 2-second negative
+DESCENT_PRECISION_MAX = 4
 
 
 class RepCounter:
@@ -36,7 +50,7 @@ class RepCounter:
 
         elif self.state == "DESCENDING":
             if angle > STANDING_ANGLE_THRESHOLD:
-                self.state = "STANDING"  # aborted before reaching bottom
+                self.state = "STANDING"
             elif angle < BOTTOM_ANGLE_THRESHOLD:
                 self.state = "BOTTOM"
                 self.t_bottom_enter = timestamp
@@ -50,7 +64,7 @@ class RepCounter:
 
         elif self.state == "ASCENDING":
             if angle < BOTTOM_ANGLE_THRESHOLD:
-                self.state = "BOTTOM"  # sank back down, still the same rep
+                self.state = "BOTTOM"
                 self.min_angle = min(self.min_angle, angle)
             elif angle > STANDING_ANGLE_THRESHOLD:
                 descent_duration_s = self.t_bottom_enter - self.t_standing_exit
@@ -88,24 +102,62 @@ class RepCounter:
         if depth_penalty > DEPTH_WARNING_THRESHOLD:
             warnings.append("Didn't reach full depth")
 
-        # Tempo penalty - gradual based on how far under the threshold the descent was
-        tempo_threshold = max(MIN_DESCENT_S, ascent_duration_s / 2)
-        if descent_duration_s >= tempo_threshold:
-            tempo_penalty = 0
+        # Descent tempo penalty - gradual based on how far under the threshold the descent was
+        descent_threshold = max(MIN_DESCENT_S, ascent_duration_s / 2)
+        if descent_duration_s >= descent_threshold:
+            descent_penalty = 0
         else:
-            deficit_ratio = (tempo_threshold - descent_duration_s) / tempo_threshold
-            tempo_penalty = TEMPO_MAX_PENALTY * min(1.0, deficit_ratio)
-        if tempo_penalty > TEMPO_WARNING_THRESHOLD:
+            deficit_ratio = (descent_threshold - descent_duration_s) / descent_threshold
+            descent_penalty = DESCENT_MAX_PENALTY * min(1.0, deficit_ratio)
+        if descent_penalty > DESCENT_WARNING_THRESHOLD:
             warnings.append("Descent too fast")
 
-        score = max(0, min(100, round(100 - depth_penalty - tempo_penalty)))
+        # Ascent tempo penalty
+        if ascent_duration_s >= MIN_ASCENT_S:
+            ascent_penalty = 0
+        else:
+            deficit_ratio = (MIN_ASCENT_S - ascent_duration_s) / MIN_ASCENT_S
+            ascent_penalty = ASCENT_MAX_PENALTY * min(1.0, deficit_ratio)
+        if ascent_penalty > ASCENT_WARNING_THRESHOLD:
+            warnings.append("Stood up too fast - drive up with control")
+
+        # Precision layer - small continuous differentiation even among
+        # reps that already clear full credit above. Clamping min_angle at
+        # DEPTH_FULL_CREDIT_ANGLE means a shallow rep isn't double-penalized
+        # here; it just doesn't earn the extra precision credit either.
+        depth_for_precision = min(min_angle, DEPTH_FULL_CREDIT_ANGLE)
+        if depth_for_precision > DEPTH_IDEAL_ANGLE:
+            depth_precision_penalty = DEPTH_PRECISION_MAX * (
+                (depth_for_precision - DEPTH_IDEAL_ANGLE)
+                / (DEPTH_FULL_CREDIT_ANGLE - DEPTH_IDEAL_ANGLE)
+            )
+        else:
+            depth_precision_penalty = 0
+
+        if descent_duration_s < DESCENT_IDEAL_S:
+            descent_for_precision = max(descent_duration_s, MIN_DESCENT_S)
+            descent_precision_penalty = DESCENT_PRECISION_MAX * (
+                (DESCENT_IDEAL_S - descent_for_precision)
+                / (DESCENT_IDEAL_S - MIN_DESCENT_S)
+            )
+        else:
+            descent_precision_penalty = 0
+
+        score = max(0, min(100, round(
+            100 - depth_penalty - descent_penalty - ascent_penalty
+            - depth_precision_penalty - descent_precision_penalty
+        )))
         return score, warnings
 
 
 if __name__ == "__main__":
     counter = RepCounter()
-    angles = [175, 170, 140, 100, 85, 100, 140, 175]
-    completed = [r for i, a in enumerate(angles) if (r := counter.update(a, True, float(i))) is not None]
+    angles = [175, 170, 140, 100, 75, 100, 140, 175]
+    timestamps = [0, 0.3, 0.6, 1.0, 1.7, 2.3, 2.9, 3.6]
+    completed = [
+        r for a, t in zip(angles, timestamps)
+        if (r := counter.update(a, True, t)) is not None
+    ]
     assert len(completed) == 1
-    assert completed[0]["score"] >= 90
+    assert completed[0]["score"] >= 85
     print("scoring.py self-check OK")
